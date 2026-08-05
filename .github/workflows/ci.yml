@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    tags:
+      - 'rel-*'
+  workflow_dispatch:
+    inputs:
+      znuny_version:
+        description: 'Znuny version to build (e.g. 7.3.1)'
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  prepare:
+    name: Determine version
+    runs-on: ubuntu-latest
+    outputs:
+      znuny_version: ${{ steps.version.outputs.znuny_version }}
+    steps:
+      - name: Set version from tag or input
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "znuny_version=${{ inputs.znuny_version }}" >> "$GITHUB_OUTPUT"
+          else
+            # Convert tag rel-MAJOR_MINOR_PATCH to MAJOR.MINOR.PATCH
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#rel-}"
+            VERSION="${VERSION//_/.}"
+            echo "znuny_version=${VERSION}" >> "$GITHUB_OUTPUT"
+          fi
+
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: .
+          ignore_paths: .git
+
+  build-base:
+    name: Build base image
+    runs-on: ubuntu-latest
+    needs: [shellcheck, prepare]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push znuny-base
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: dockerfiles/base
+          build-args: ZNUNY_VERSION=${{ needs.prepare.outputs.znuny_version }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/znuny-base:${{ needs.prepare.outputs.znuny_version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/znuny-base:latest
+
+  build-daemon:
+    name: Build daemon image
+    runs-on: ubuntu-latest
+    needs: [build-base, prepare]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull and tag base image
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/znuny-base:${{ needs.prepare.outputs.znuny_version }}
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/znuny-base:${{ needs.prepare.outputs.znuny_version }} znuny-base
+
+      - name: Build and push znuny-daemon
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: dockerfiles/daemon
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/znuny-daemon:${{ needs.prepare.outputs.znuny_version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/znuny-daemon:latest
+
+  build-httpd:
+    name: Build Apache image
+    runs-on: ubuntu-latest
+    needs: [build-base, prepare]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull and tag base image
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/znuny-base:${{ needs.prepare.outputs.znuny_version }}
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/znuny-base:${{ needs.prepare.outputs.znuny_version }} znuny-base
+
+      - name: Build and push znuny-httpd
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: dockerfiles/apache
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/znuny-httpd:${{ needs.prepare.outputs.znuny_version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/znuny-httpd:latest

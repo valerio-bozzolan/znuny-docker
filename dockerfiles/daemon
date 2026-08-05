@@ -1,0 +1,17 @@
+# Dockerfile.daemon
+FROM znuny-base AS base
+FROM base
+
+# Setup Entrypoint
+COPY ./entrypoints/daemon.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Watchdog Setup
+COPY ./docker-specific/watchdog.sh /usr/local/bin/watchdog.sh
+RUN chmod +x /usr/local/bin/watchdog.sh
+RUN chown znuny:www-data /usr/local/bin/watchdog.sh
+
+USER root
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["/usr/local/bin/watchdog.sh"]

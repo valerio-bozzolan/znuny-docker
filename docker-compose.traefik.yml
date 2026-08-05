@@ -1,0 +1,33 @@
+volumes:
+  TraefikCerts:
+
+services:
+  traefik:
+    image: traefik:v3.4
+    container_name: znuny_traefik
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:?ACME_EMAIL must be set in .env}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/certs/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - TraefikCerts:/certs
+    restart: unless-stopped
+
+  znuny-httpd:
+    ports: !reset []
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.znuny.rule: "Host(`${ZNUNY_DOMAIN:?ZNUNY_DOMAIN must be set in .env}`)"
+      traefik.http.routers.znuny.entrypoints: "websecure"
+      traefik.http.routers.znuny.tls.certresolver: "letsencrypt"
+      traefik.http.services.znuny.loadbalancer.server.port: "80"

@@ -1,0 +1,109 @@
+# Dockerfile.base
+# Shared base image for daemon and apache containers
+FROM debian:12.13-slim
+
+ARG ZNUNY_VERSION=7.3.1
+ARG ZNUNY_USER=znuny
+ENV ZNUNY_HOME=/opt/znuny-${ZNUNY_VERSION} \
+    PATH=$PATH:/opt/znuny-${ZNUNY_VERSION}/bin
+
+# Install gosu
+ARG GOSU_VERSION=1.17
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates wget && \
+    dpkgArch="$(dpkg --print-architecture)" && \
+    wget -qO /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/${GOSU_VERSION}/gosu-${dpkgArch}" && \
+    chmod +x /usr/local/bin/gosu && \
+    gosu nobody true && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install common packages and Perl modules
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      wget default-mysql-client vim curl unzip \
+      libdbd-odbc-perl \
+      libdbd-mysql-perl \
+      libdbi-perl \
+      libtimedate-perl \
+      libnet-dns-perl \
+      libnet-ldap-perl \
+      libio-socket-ssl-perl \
+      libpdf-api2-perl \
+      libsoap-lite-perl \
+      libtext-csv-xs-perl \
+      libjson-xs-perl \
+      libapache-dbi-perl \
+      libxml-libxml-perl \
+      libxml-libxslt-perl \
+      libyaml-perl \
+      libarchive-zip-perl \
+      libcrypt-eksblowfish-perl \
+      libencode-hanextra-perl \
+      libmail-imapclient-perl \
+      libtemplate-perl \
+      libdatetime-perl \
+      libdatetime-timezone-perl \
+      libdatetime-locale-perl \
+      libmoo-perl \
+      locales \
+      bash-completion \
+      libyaml-libyaml-perl \
+      libjavascript-minifier-xs-perl \
+      libcss-minifier-xs-perl \
+      libauthen-sasl-perl \
+      libauthen-ntlm-perl \
+      libdbd-pg-perl \
+      libcrypt-jwt-perl \
+      libcrypt-openssl-x509-perl \
+      libhash-merge-perl \
+      libical-parser-perl \
+      libspreadsheet-xlsx-perl \
+      libdata-uuid-perl \
+      libmoose-perl \
+      libmoosex-types-uri-perl \
+      libmoosex-types-datetime-perl \
+      libdatetime-format-xsd-perl \
+      libdatetime-hires-perl \
+      liblwp-protocol-https-perl \
+      libxml-libxml-perl \
+      libssl-dev \
+      libcrypt-openssl-random-perl \
+      libfile-slurper-perl \
+      build-essential cpanminus && \
+    apt-get clean && rm -rf /var/lib/apt/lists/* && \
+    sed -i '/en_US.UTF-8/s/^# //' /etc/locale.gen && \
+    locale-gen
+
+# Setup Perl modules and cleanup
+RUN cpanm --notest --force Jq  Net::SAML2 && \
+    apt remove --purge -y build-essential cpanminus gcc make libssl-dev && \
+    apt autoremove --purge -y && \
+    rm -rf /var/lib/apt/lists/* /root/.cpanm
+
+# Download and extract Znuny
+# Supports release versions (e.g. 7.2.2), nightly builds (nightly), and LTS nightly (lts-nightly)
+RUN if [ "${ZNUNY_VERSION}" = "nightly" ]; then \
+      ZNUNY_URL="https://download.znuny.org/nightly/znuny-nightly.tar.gz"; \
+    elif [ "${ZNUNY_VERSION}" = "lts-nightly" ]; then \
+      ZNUNY_URL="https://download.znuny.org/nightly/znuny-lts-nightly.tar.gz"; \
+    else \
+      ZNUNY_URL="https://download.znuny.org/releases/znuny-${ZNUNY_VERSION}.tar.gz"; \
+    fi && \
+    wget -qO /tmp/znuny.tar.gz "$ZNUNY_URL" && \
+    mkdir -p ${ZNUNY_HOME} && \
+    tar xzf /tmp/znuny.tar.gz -C ${ZNUNY_HOME} --strip-components=1 && \
+    rm /tmp/znuny.tar.gz
+
+RUN ln -s ${ZNUNY_HOME} /opt/znuny
+
+# Enable MySQL modules in Apache Perl startup
+RUN sed -i 's/^#use DBD::mysql/use DBD::mysql/' ${ZNUNY_HOME}/scripts/apache2-perl-startup.pl && \
+    sed -i 's/^#use Kernel::System::DB::mysql/use Kernel::System::DB::mysql/' ${ZNUNY_HOME}/scripts/apache2-perl-startup.pl
+
+# Create Znuny user and set permissions
+RUN useradd -d ${ZNUNY_HOME} -c "Znuny user" -g www-data -s /bin/bash -M -N ${ZNUNY_USER}
+RUN mkdir /persistent && cp /opt/znuny/Kernel/Config.pm.dist /persistent/Config.pm && chown -R znuny:www-data /persistent && chmod 2775 /persistent
+#RUN ln -s /persistent/Config.pm Kernel/Config.pm
+RUN ${ZNUNY_HOME}/bin/znuny.SetPermissions.pl --znuny-user ${ZNUNY_USER}
+
+WORKDIR ${ZNUNY_HOME}

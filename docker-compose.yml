@@ -1,0 +1,96 @@
+volumes:
+  MariaDBVol:
+  ZnunyPersistent:
+  ZnunyApp:
+
+services:
+  znuny-base:
+    build:
+      context: .
+      dockerfile: ./dockerfiles/base
+    image: znuny-base
+    profiles:
+      - build
+
+  znuny-httpd:
+    build:
+      context: .
+      dockerfile: ./dockerfiles/apache
+    image: ${CONTAINER_REGISTRY:-znuny}/znuny-httpd:${ZNUNY_IMAGE_TAG:-latest}
+    container_name: znuny_httpd
+    mem_limit: ${ZNUNY_HTTPD_MEMLIMIT:-1024m}
+    cpus: ${ZNUNY_HTTPD_CPUS:-2}
+    ports:
+      - "${external_port:-80}:80"
+    environment:
+      LANG: en_US.UTF-8
+      DB_HOST: ${DB_HOST:-znuny-db}
+      DB_NAME: ${DB_NAME:-znuny}
+      DB_USER: ${DB_USER:-znuny}
+      DB_USER_PASS: ${DB_USER_PASS:?DB_USER_PASS must be set in .env}
+      ZNUNY_ADMIN_PASS: ${ZNUNY_ADMIN_PASS:?ZNUNY_ADMIN_PASS must be set in .env}
+      DEFAULT_INTERFACE: ${DEFAULT_INTERFACE:-agent}
+    depends_on:
+      znuny-db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/znuny/index.pl", "-o", "/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+    volumes:
+      - ZnunyApp:/opt/znuny
+      - ZnunyPersistent:/persistent
+
+  znuny-daemon:
+    build:
+      context: .
+      dockerfile: ./dockerfiles/daemon
+    image: ${CONTAINER_REGISTRY:-znuny}/znuny-daemon:${ZNUNY_IMAGE_TAG:-latest}
+    container_name: znuny_daemon
+    mem_limit: ${ZNUNY_DAEMON_MEMLIMIT:-2048m}
+    cpus: ${ZNUNY_DAEMON_CPUS:-2}
+    environment:
+      LANG: en_US.UTF-8
+    restart: unless-stopped
+    depends_on:
+      znuny-httpd:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "gosu", "znuny", "/opt/znuny/bin/znuny.Daemon.pl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    volumes:
+      - ZnunyApp:/opt/znuny
+      - ZnunyPersistent:/persistent
+
+  znuny-db:
+    image: mariadb:${MARIADB_VERSION:-11.4.7}
+    container_name: znuny_db
+    mem_limit: ${ZNUNY_DB_MEMLIMIT:-2048m}
+    cpus: ${ZNUNY_DB_CPUS:-2}
+    environment:
+      LANG: en_US.UTF-8
+      MYSQL_ROOT_PASSWORD: ${ROOT_PASS:?ROOT_PASS must be set in .env}
+      MYSQL_DATABASE: ${DB_NAME:-znuny}
+      MYSQL_USER: ${DB_USER:-znuny}
+      MYSQL_PASSWORD: ${DB_USER_PASS:?DB_USER_PASS must be set in .env}
+    volumes:
+      - MariaDBVol:/var/lib/mysql
+    restart: unless-stopped
+    command: [
+      "--max_allowed_packet=256M",
+      "--innodb_log_file_size=512M"
+    ]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    labels:
+      org.label-schema.group: "znuny"

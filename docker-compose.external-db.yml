@@ -1,0 +1,18 @@
+# External database override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.external-db.yml up -d [--build]
+#
+# Set DB_HOST, DB_NAME, DB_USER, DB_USER_PASS in .env to point at your external database.
+# ROOT_PASS must still be present in .env (any value) — it is referenced in the base file
+# but not used when MariaDB is not running.
+
+services:
+  znuny-db:
+    image: busybox
+    command: ["sh", "-c", "sleep infinity"]
+    environment:
+      MYSQL_ROOT_PASSWORD: "not-used"
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 5s
+      retries: 1
+      start_period: 1s
