@@ -18,7 +18,7 @@ jobs:
       packages: write
     steps:
       - name: Setup Crane
-        uses: imjoshholloway/setup-crane@v1
+        uses: imjasonh/setup-crane@v0.1
 
       - name: Log in to GHCR
         run: |
