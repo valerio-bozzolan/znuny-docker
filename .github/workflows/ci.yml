@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    tags:
+      - 'rel-*'
   workflow_dispatch:
     inputs:
       znuny_version:
