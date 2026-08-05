@@ -188,7 +188,7 @@ To use pre-built images from a registry instead of building locally, set `CONTAI
 
 ```env
 # GitHub Container Registry
-CONTAINER_REGISTRY=ghcr.io/znuny
+CONTAINER_REGISTRY=ghcr.io/znuny/znuny-docker
 ZNUNY_IMAGE_TAG=stable
 ```
 
@@ -242,7 +242,7 @@ docker compose up -d --build
 Set `ZNUNY_IMAGE_TAG` to the new version in `.env`:
 
 ```env
-CONTAINER_REGISTRY=ghcr.io/znuny
+CONTAINER_REGISTRY=ghcr.io/znuny/znuny-docker
 ZNUNY_IMAGE_TAG=7.3.2
 ```
 
