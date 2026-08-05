@@ -1,0 +1,31 @@
+name: Add Tag to Container Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      existing_tag:
+        description: 'Existing tag (or digest SHA, e.g. sha256:...)'
+        required: true
+        default: 'latest'
+      new_tag:
+        description: 'New tag to apply'
+        required: true
+
+jobs:
+  retag:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Setup Crane
+        uses: imjoshholloway/setup-crane@v1
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | crane auth login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Add Tag
+        run: |
+          IMAGE_PATH="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}"
+          crane tag "$IMAGE_PATH:${{ inputs.existing_tag }}" "${{ inputs.new_tag }}"
+
