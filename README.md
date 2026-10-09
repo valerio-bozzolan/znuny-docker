@@ -318,27 +318,27 @@ docker exec -u znuny znuny_daemon /opt/znuny/bin/znuny.Console.pl Maint::Config:
 docker exec -u znuny znuny_daemon /opt/znuny/bin/znuny.Console.pl Maint::Cache::Delete
 ```
 
-### Database Backup with mysqldump
+### Database Backup with mariadb-dump
 
 Using environment variables from `.env`:
 
 ```bash
 source .env
-docker exec znuny_db mysqldump -u "$DB_USER" -p"$DB_USER_PASS" "$DB_NAME" > backup.sql
+docker exec znuny_db mariadb-dump -u "$DB_USER" -p"$DB_USER_PASS" "$DB_NAME" > backup.sql
 ```
 
 To create a compressed backup:
 
 ```bash
 source .env
-docker exec znuny_db mysqldump -u "$DB_USER" -p"$DB_USER_PASS" "$DB_NAME" | gzip > backup_$(date +%Y%m%d_%H%M%S).sql.gz
+docker exec znuny_db mariadb-dump -u "$DB_USER" -p"$DB_USER_PASS" "$DB_NAME" | gzip > backup_$(date +%Y%m%d_%H%M%S).sql.gz
 ```
 
 ### Restoring a Database Backup
 
 ```bash
 source .env
-docker exec -i znuny_db mysql -u "$DB_USER" -p"$DB_USER_PASS" "$DB_NAME" < backup.sql
+docker exec -i znuny_db mariadb -u "$DB_USER" -p"$DB_USER_PASS" "$DB_NAME" < backup.sql
 ```
 
 ## CI/CD
